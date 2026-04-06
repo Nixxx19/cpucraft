@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cpucraft - 16-bit CPU Emulator</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <header>
+    <div class="header-left">
+      <h1>cpucraft</h1>
+      <span class="subtitle">16-bit CPU Emulator</span>
+    </div>
+    <div class="header-right">
+      <select id="example-select">
+        <option value="">Load example...</option>
+        <option value="hello">hello.asm - Print HELLO WORLD</option>
+        <option value="fibonacci">fibonacci.asm - Fibonacci sequence</option>
+        <option value="sort">sort.asm - Bubble sort</option>
+      </select>
+    </div>
+  </header>
+
+  <main>
+    <!-- Left panel: code editor -->
+    <section class="panel panel-editor">
+      <div class="panel-header">
+        <span>Assembly Editor</span>
+        <span class="shortcuts-hint">F6: Assemble | F10: Step | F5: Run/Stop</span>
+      </div>
+      <div class="editor-wrapper">
+        <pre class="line-numbers" id="line-numbers"></pre>
+        <textarea id="code-editor" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
+      </div>
+      <div id="error-output" class="error-output" style="display:none;"></div>
+    </section>
+
+    <!-- Right panel -->
+    <section class="panel panel-right">
+      <!-- Registers -->
+      <div class="sub-panel">
+        <div class="panel-header">
+          <span>Registers</span>
+          <span id="cycle-count" class="cycle-count">Cycles: 0</span>
+        </div>
+        <div id="registers" class="registers"></div>
+        <div id="current-instr" class="current-instr"></div>
+      </div>
+
+      <!-- Memory -->
+      <div class="sub-panel">
+        <div class="panel-header">
+          <span>Memory</span>
+          <div class="mem-controls">
+            <button id="mem-prev" class="btn-small" title="Previous page">&lt;</button>
+            <input id="mem-addr-input" class="mem-addr-input" type="text" value="0x0000" />
+            <button id="mem-next" class="btn-small" title="Next page">&gt;</button>
+          </div>
+        </div>
+        <div id="memory-grid" class="memory-grid"></div>
+      </div>
+
+      <!-- Output -->
+      <div class="sub-panel">
+        <div class="panel-header">Output</div>
+        <div id="output-content" class="output-content"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Controls bar -->
+  <footer>
+    <div class="controls">
+      <button id="btn-assemble" class="btn btn-primary">Assemble</button>
+      <button id="btn-step" class="btn">Step</button>
+      <button id="btn-run" class="btn btn-run">Run</button>
+      <button id="btn-stop" class="btn btn-stop" disabled>Stop</button>
+      <button id="btn-reset" class="btn">Reset</button>
+      <div class="speed-control">
+        <label for="speed-slider">Speed:</label>
+        <input id="speed-slider" type="range" min="1" max="500" value="50" />
+        <span id="speed-display">50ms</span>
+      </div>
+    </div>
+    <div id="status-bar" class="status-bar">Ready</div>
+  </footer>
+
+  <script type="module" src="./src/main.ts"></script>
+</body>
+</html>
