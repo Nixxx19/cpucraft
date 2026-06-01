@@ -25,7 +25,9 @@ build for prod with `npm run build`, run the tests with `npm test`.
 
 you type assembly in the editor. the assembler turns it into machine code (just an array of 16-bit numbers) and drops it into memory at address 0. then the cpu does the usual loop: read the instruction at pc, figure out what it is, do it, move pc forward, repeat until it hits `hlt`.
 
-![the fetch-decode-execute loop](cpu-cycle.png)
+<p align="center">
+  <img src="cpu-cycle.png" alt="the fetch-decode-execute loop" width="300">
+</p>
 
 the cpu loop itself is just:
 
