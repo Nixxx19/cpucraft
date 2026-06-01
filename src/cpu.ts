@@ -1,11 +1,11 @@
 // ============================================================
-// cpucraft - 16-bit CPU Core
+// cpucraft - 16-bit cpu core
 // ============================================================
 
-// --- Opcodes ------------------------------------------------
+// --- opcodes ------------------------------------------------
 export const Opcode = {
   HLT:   0x00,
-  MOV:   0x01,  // MOV Rd, Rs/imm
+  MOV:   0x01,  // mov rd, rs/imm
   ADD:   0x02,
   SUB:   0x03,
   MUL:   0x04,
@@ -26,8 +26,8 @@ export const Opcode = {
   POP:   0x13,
   CALL:  0x14,
   RET:   0x15,
-  LOAD:  0x16,  // LOAD Rd, [addr/Rs]
-  STORE: 0x17,  // STORE [addr/Rs], Rs
+  LOAD:  0x16,  // load rd, [addr/rs]
+  STORE: 0x17,  // store [addr/rs], rs
   IN:    0x18,
   OUT:   0x19,
   NOP:   0x1A,
@@ -35,6 +35,10 @@ export const Opcode = {
   JLE:   0x1C,
   INC:   0x1D,
   DEC:   0x1E,
+  MOD:   0x1F,  // mod rd, rs/imm
+  NEG:   0x20,  // neg rd
+  SWAP:  0x21,  // swap rd, rs
+  TEST:  0x22,  // test rd, rs/imm
 } as const;
 
 export type OpcodeValue = (typeof Opcode)[keyof typeof Opcode];
@@ -44,7 +48,7 @@ for (const [name, val] of Object.entries(Opcode)) {
   OPCODE_NAMES[val] = name;
 }
 
-// --- Flags --------------------------------------------------
+// --- flags --------------------------------------------------
 export const Flag = {
   ZERO:     0b0001,
   CARRY:    0b0010,
@@ -52,10 +56,10 @@ export const Flag = {
   OVERFLOW: 0b1000,
 } as const;
 
-// --- Instruction encoding -----------------------------------
-// Each instruction is 1-3 words (16-bit each):
-//   Word 0:  [opcode:8][mode:2][regA:3][regB:3]
-//   Word 1:  immediate / address (optional)
+// --- instruction encoding -----------------------------------
+// each instruction is 1-2 words (16-bit each):
+//   word 0:  [opcode:8][mode:2][rega:3][regb:3]
+//   word 1:  immediate / address (optional)
 //
 // mode: 0 = reg,reg   1 = reg,imm   2 = reg,[addr]  3 = [addr],reg
 
@@ -79,20 +83,22 @@ export function decodeInstruction(word: number) {
   };
 }
 
-// --- CPU State ----------------------------------------------
+// --- cpu state ----------------------------------------------
 export interface CPUState {
-  registers: Uint16Array;   // R0-R7 = index 0-7
+  registers: Uint16Array;   // r0-r7 = index 0-7
   pc: number;
   sp: number;
   flags: number;
   memory: Uint16Array;
   halted: boolean;
   outputBuffer: number[];
+  inputBuffer: number[];    // queue read by in
+  inputPos: number;
   cycleCount: number;
 }
 
 export const REG_COUNT = 8;
-export const MEM_SIZE = 0x10000; // 64K words (128KB)
+export const MEM_SIZE = 0x10000; // 64k words (128kb)
 export const STACK_START = 0xFFFE;
 
 export function createCPU(): CPUState {
@@ -104,6 +110,8 @@ export function createCPU(): CPUState {
     memory: new Uint16Array(MEM_SIZE),
     halted: false,
     outputBuffer: [],
+    inputBuffer: [],
+    inputPos: 0,
     cycleCount: 0,
   };
 }
@@ -116,10 +124,12 @@ export function resetCPU(cpu: CPUState): void {
   cpu.memory.fill(0);
   cpu.halted = false;
   cpu.outputBuffer = [];
+  cpu.inputBuffer = [];
+  cpu.inputPos = 0;
   cpu.cycleCount = 0;
 }
 
-// --- Helpers ------------------------------------------------
+// --- helpers ------------------------------------------------
 function setFlag(cpu: CPUState, flag: number, val: boolean): void {
   if (val) cpu.flags |= flag;
   else cpu.flags &= ~flag;
@@ -164,7 +174,7 @@ function popWord(cpu: CPUState): number {
   return cpu.memory[cpu.sp];
 }
 
-// --- Fetch-Decode-Execute -----------------------------------
+// --- fetch-decode-execute -----------------------------------
 export function step(cpu: CPUState): { executed: boolean; instrAddr: number } {
   if (cpu.halted) return { executed: false, instrAddr: cpu.pc };
 
@@ -172,14 +182,14 @@ export function step(cpu: CPUState): { executed: boolean; instrAddr: number } {
   const word = readWord(cpu);
   const { opcode, mode, regA, regB } = decodeInstruction(word);
 
-  // Read immediate if mode requires it
+  // read immediate if mode requires it
   let imm = 0;
   const needsImm = mode === Mode.REG_IMM || mode === Mode.REG_ADDR || mode === Mode.ADDR_REG;
   if (needsImm && opcode !== Opcode.HLT && opcode !== Opcode.RET && opcode !== Opcode.NOP) {
     imm = readWord(cpu);
   }
 
-  // Resolve operand B value
+  // resolve operand b value
   const bVal = (): number => {
     switch (mode) {
       case Mode.REG_REG:  return cpu.registers[regB];
@@ -362,35 +372,37 @@ export function step(cpu: CPUState): { executed: boolean; instrAddr: number } {
     }
 
     case Opcode.LOAD: {
-      // LOAD Rd, [addr] or LOAD Rd, [Rs]
+      // load rd, [addr] or load rd, [rs]
       if (mode === Mode.REG_ADDR || mode === Mode.REG_IMM) {
         cpu.registers[regA] = cpu.memory[imm & 0xFFFF];
       } else {
-        // REG_REG: load from address in regB
+        // reg_reg: load from address in regb
         cpu.registers[regA] = cpu.memory[cpu.registers[regB]];
       }
       break;
     }
 
     case Opcode.STORE: {
-      // STORE [addr], Rs  or  STORE [Rd], Rs
+      // store [addr], rs  or  store [rd], rs
       if (mode === Mode.ADDR_REG || mode === Mode.REG_IMM) {
         cpu.memory[imm & 0xFFFF] = cpu.registers[regB];
       } else {
-        // REG_REG: store at address in regA
+        // reg_reg: store at address in rega
         cpu.memory[cpu.registers[regA]] = cpu.registers[regB];
       }
       break;
     }
 
     case Opcode.IN: {
-      // IN Rd - read from input (stubbed to 0 for now)
-      cpu.registers[regA] = 0;
+      // next from input queue, 0 if empty
+      const val = cpu.inputPos < cpu.inputBuffer.length ? cpu.inputBuffer[cpu.inputPos++] : 0;
+      cpu.registers[regA] = val & 0xFFFF;
+      setFlag(cpu, Flag.ZERO, (val & 0xFFFF) === 0);
       break;
     }
 
     case Opcode.OUT: {
-      // OUT Rs - write register value to output buffer
+      // out rs - write register value to output buffer
       cpu.outputBuffer.push(cpu.registers[regA]);
       break;
     }
@@ -411,8 +423,45 @@ export function step(cpu: CPUState): { executed: boolean; instrAddr: number } {
       break;
     }
 
+    case Opcode.MOD: {
+      const a = cpu.registers[regA], b = bVal();
+      if (b === 0) {
+        cpu.halted = true; // div by zero halts
+        break;
+      }
+      const result = a % b;
+      cpu.registers[regA] = result & 0xFFFF;
+      setFlag(cpu, Flag.ZERO, (result & 0xFFFF) === 0);
+      setFlag(cpu, Flag.NEGATIVE, false);
+      break;
+    }
+
+    case Opcode.NEG: {
+      const a = cpu.registers[regA];
+      const result = (-a) & 0xFFFF; // two's complement
+      cpu.registers[regA] = result;
+      setFlag(cpu, Flag.ZERO, result === 0);
+      setFlag(cpu, Flag.NEGATIVE, (result & 0x8000) !== 0);
+      break;
+    }
+
+    case Opcode.SWAP: {
+      const tmp = cpu.registers[regA];
+      cpu.registers[regA] = cpu.registers[regB];
+      cpu.registers[regB] = tmp;
+      break;
+    }
+
+    case Opcode.TEST: {
+      // like cmp but bitwise
+      const result = cpu.registers[regA] & bVal();
+      setFlag(cpu, Flag.ZERO, result === 0);
+      setFlag(cpu, Flag.NEGATIVE, (result & 0x8000) !== 0);
+      break;
+    }
+
     default:
-      // Unknown opcode - treat as NOP
+      // unknown opcode - treat as nop
       break;
   }
 
@@ -420,11 +469,11 @@ export function step(cpu: CPUState): { executed: boolean; instrAddr: number } {
   return { executed: true, instrAddr };
 }
 
-// Determine instruction size (1 or 2 words) for a given first word
+// determine instruction size (1 or 2 words) for a given first word
 export function instructionSize(word: number): number {
   const { opcode, mode } = decodeInstruction(word);
   if (opcode === Opcode.HLT || opcode === Opcode.RET || opcode === Opcode.NOP) return 1;
-  if (opcode === Opcode.NOT || opcode === Opcode.INC || opcode === Opcode.DEC) return 1;
+  if (opcode === Opcode.NOT || opcode === Opcode.INC || opcode === Opcode.DEC || opcode === Opcode.NEG) return 1;
   if (opcode === Opcode.PUSH || opcode === Opcode.POP) return 1;
   if (opcode === Opcode.OUT || opcode === Opcode.IN) return 1;
   if (mode === Mode.REG_REG) return 1;

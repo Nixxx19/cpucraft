@@ -1,12 +1,12 @@
 // ============================================================
-// cpucraft - UI: DOM manipulation, displays, editor
+// cpucraft - ui: dom manipulation, displays, editor
 // ============================================================
 
 import { CPUState, REG_COUNT, Flag, OPCODE_NAMES, decodeInstruction, instructionSize } from './cpu';
 import { AssemblerResult } from './assembler';
 import { DebuggerState } from './debugger';
 
-// ---- Helpers ------------------------------------------------
+// ---- helpers ------------------------------------------------
 function $(id: string): HTMLElement {
   return document.getElementById(id)!;
 }
@@ -19,7 +19,7 @@ function hex8(v: number): string {
   return (v & 0xFF).toString(16).toUpperCase().padStart(2, '0');
 }
 
-// ---- Register display ---------------------------------------
+// ---- register display ---------------------------------------
 const prevRegs = new Uint16Array(REG_COUNT);
 let prevPC = 0, prevSP = 0, prevFlags = 0;
 
@@ -48,17 +48,23 @@ export function updateRegisters(cpu: CPUState): void {
 
   container.innerHTML = rows.join('');
 
-  // Save for next diff
+  // save for next diff
   prevRegs.set(cpu.registers);
   prevPC = cpu.pc;
   prevSP = cpu.sp;
   prevFlags = cpu.flags;
 }
 
-// ---- Memory viewer ------------------------------------------
+// ---- memory viewer ------------------------------------------
 let memViewStart = 0;
 const MEM_ROWS = 16;
 const MEM_COLS = 8;
+
+// breakpoints, shared with debugger so we can highlight them
+let breakpointRef: Set<number> | null = null;
+export function setBreakpointSet(s: Set<number>): void {
+  breakpointRef = s;
+}
 
 export function updateMemory(cpu: CPUState): void {
   const container = $('memory-grid');
@@ -71,8 +77,13 @@ export function updateMemory(cpu: CPUState): void {
       const addr = baseAddr + c;
       const val = cpu.memory[addr & 0xFFFF] ?? 0;
       const isPC = addr === cpu.pc;
-      const cls = isPC ? 'mem-cell mem-pc' : val !== 0 ? 'mem-cell mem-nonzero' : 'mem-cell';
-      row += `<span class="${cls}">${hex16(val)}</span>`;
+      const isBp = breakpointRef?.has(addr) ?? false;
+      let cls = 'mem-cell';
+      if (isPC) cls += ' mem-pc';
+      else if (val !== 0) cls += ' mem-nonzero';
+      if (isBp) cls += ' mem-breakpoint';
+      const tip = `${hex16(addr)}${isBp ? ' — breakpoint (click to clear)' : ' — click to set breakpoint'}`;
+      row += `<span class="${cls}" data-addr="${addr}" title="${tip}">${hex16(val)}</span>`;
     }
     rows.push(`<div class="mem-row">${row}</div>`);
   }
@@ -89,7 +100,7 @@ export function getMemViewStart(): number {
   return memViewStart;
 }
 
-export function initMemoryControls(cpu: CPUState): void {
+export function initMemoryControls(cpu: CPUState, onToggleBreakpoint?: (addr: number) => void): void {
   const input = $('mem-addr-input') as HTMLInputElement;
   input.value = hex16(0);
 
@@ -110,22 +121,48 @@ export function initMemoryControls(cpu: CPUState): void {
     setMemViewAddr(memViewStart + MEM_ROWS * MEM_COLS);
     updateMemory(cpu);
   });
+
+  // click a memory cell to toggle a breakpoint at that address.
+  $('memory-grid').addEventListener('click', (e) => {
+    const cell = (e.target as HTMLElement).closest('.mem-cell') as HTMLElement | null;
+    if (!cell || !cell.dataset.addr) return;
+    onToggleBreakpoint?.(parseInt(cell.dataset.addr, 10));
+    updateMemory(cpu);
+  });
 }
 
-// ---- Output console -----------------------------------------
+// ---- input queue --------------------------------------------
+export function getInputQueue(): number[] {
+  const raw = ($('input-queue') as HTMLInputElement).value.trim();
+  if (!raw) return [];
+  return raw.split(/[\s,]+/).filter(Boolean).map(t => {
+    let n: number;
+    if (/^0x/i.test(t)) n = parseInt(t, 16);
+    else if (/^0b/i.test(t)) n = parseInt(t.slice(2), 2);
+    else n = parseInt(t, 10);
+    return (isNaN(n) ? 0 : n) & 0xFFFF;
+  });
+}
+
+export function setInputQueue(s: string): void {
+  ($('input-queue') as HTMLInputElement).value = s;
+}
+
+// ---- output console -----------------------------------------
 export function updateOutput(cpu: CPUState): void {
   const container = $('output-content');
   if (cpu.outputBuffer.length === 0) {
     container.textContent = '';
     return;
   }
-  // Show as characters (printable) and hex
-  const chars = cpu.outputBuffer.map(v => {
-    if (v >= 32 && v <= 126) return String.fromCharCode(v);
-    return '.';
-  }).join('');
+  // decimal (primary), hex, and text rows
+  const dec = cpu.outputBuffer.map(v => String(v)).join(' ');
   const hexVals = cpu.outputBuffer.map(v => hex16(v)).join(' ');
-  container.innerHTML = `<div class="output-chars">${escapeHtml(chars)}</div><div class="output-hex">${hexVals}</div>`;
+  const chars = cpu.outputBuffer.map(v => (v >= 32 && v <= 126) ? String.fromCharCode(v) : '.').join('');
+  container.innerHTML =
+    `<div class="output-dec">${dec}</div>` +
+    `<div class="output-hex">${hexVals}</div>` +
+    `<div class="output-chars">text: ${escapeHtml(chars)}</div>`;
   container.scrollTop = container.scrollHeight;
 }
 
@@ -133,52 +170,64 @@ function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-// ---- Code editor with line numbers -------------------------
+// ---- code editor with line numbers -------------------------
 export function getEditorSource(): string {
   return (($('code-editor') as HTMLTextAreaElement).value);
 }
 
 export function setEditorSource(source: string): void {
   ($('code-editor') as HTMLTextAreaElement).value = source;
-  updateLineNumbers();
+  gutterCurrentLine = -1;
+  renderGutter();
+}
+
+// gutter state: the line about to execute, and which lines hold breakpoints.
+let gutterCurrentLine = -1;                       // 0-based
+let gutterBreakpointLines = new Set<number>();    // 0-based source lines
+
+export function setGutterBreakpointLines(lines: Set<number>): void {
+  gutterBreakpointLines = lines;
+  renderGutter();
+}
+
+// render the line-number gutter with breakpoint dots and a current-line arrow.
+// spans are separated by "\n" so the <pre> lays them out one per line.
+function renderGutter(): void {
+  const editor = $('code-editor') as HTMLTextAreaElement;
+  const lineCount = editor.value.split('\n').length;
+  const spans: string[] = [];
+  for (let i = 0; i < lineCount; i++) {
+    const isBp = gutterBreakpointLines.has(i);
+    const isCur = i === gutterCurrentLine;
+    let cls = 'ln';
+    if (isBp) cls += ' ln-bp';
+    if (isCur) cls += ' ln-current';
+    const marker = isBp ? '●' : isCur ? '▸' : ' ';
+    spans.push(`<span class="${cls}" data-line="${i}">${marker}${String(i + 1).padStart(3, ' ')}</span>`);
+  }
+  $('line-numbers').innerHTML = spans.join('\n');
 }
 
 export function updateLineNumbers(): void {
-  const editor = $('code-editor') as HTMLTextAreaElement;
-  const lineCount = editor.value.split('\n').length;
-  const nums: string[] = [];
-  for (let i = 1; i <= lineCount; i++) {
-    nums.push(String(i));
-  }
-  $('line-numbers').textContent = nums.join('\n');
+  renderGutter();
 }
 
 export function highlightLine(lineNum: number): void {
-  // Remove previous highlight
   const editor = $('code-editor') as HTMLTextAreaElement;
   const lines = editor.value.split('\n');
   if (lineNum < 0 || lineNum >= lines.length) return;
 
-  // Calculate character position and scroll
-  let charPos = 0;
-  for (let i = 0; i < lineNum; i++) {
-    charPos += lines[i].length + 1;
-  }
+  gutterCurrentLine = lineNum;
+  renderGutter();
 
-  // Update highlight indicator
-  const lineNums = $('line-numbers');
-  const lineEls = lineNums.textContent!.split('\n');
-  const highlighted = lineEls.map((n, i) => i === lineNum ? `>${n}` : ` ${n}`);
-  lineNums.textContent = highlighted.join('\n');
-
-  // Scroll editor to show current line
-  const lineHeight = 20; // approximate
+  // scroll editor (and gutter) to keep the current line in view.
+  const lineHeight = 20;
   const scrollTarget = lineNum * lineHeight - editor.clientHeight / 2;
   editor.scrollTop = Math.max(0, scrollTarget);
-  lineNums.parentElement!.querySelector('.line-numbers')!.scrollTop = editor.scrollTop;
+  $('line-numbers').scrollTop = editor.scrollTop;
 }
 
-// ---- Assembler error display --------------------------------
+// ---- assembler error display --------------------------------
 export function showErrors(errors: { line: number; message: string }[]): void {
   const container = $('error-output');
   if (errors.length === 0) {
@@ -192,22 +241,22 @@ export function showErrors(errors: { line: number; message: string }[]): void {
   ).join('');
 }
 
-// ---- Disassembly in status ----------------------------------
+// ---- disassembly in status ----------------------------------
 export function showStatus(msg: string): void {
   $('status-bar').textContent = msg;
 }
 
-// ---- Cycle counter ------------------------------------------
+// ---- cycle counter ------------------------------------------
 export function updateCycles(cpu: CPUState): void {
   $('cycle-count').textContent = `Cycles: ${cpu.cycleCount}`;
 }
 
-// ---- Speed display ------------------------------------------
+// ---- speed display ------------------------------------------
 export function updateSpeedDisplay(speed: number): void {
   $('speed-display').textContent = speed <= 10 ? 'MAX' : `${speed}ms`;
 }
 
-// ---- Current instruction disassembly ------------------------
+// ---- current instruction disassembly ------------------------
 export function showCurrentInstruction(cpu: CPUState): void {
   if (cpu.halted) {
     $('current-instr').textContent = '[ HALTED ]';
@@ -219,7 +268,7 @@ export function showCurrentInstruction(cpu: CPUState): void {
   $('current-instr').textContent = `Next: ${hex16(cpu.pc)}: ${name} (${hex16(word)})`;
 }
 
-// ---- Full UI update -----------------------------------------
+// ---- full ui update -----------------------------------------
 export function updateAll(cpu: CPUState): void {
   updateRegisters(cpu);
   updateMemory(cpu);
@@ -228,8 +277,8 @@ export function updateAll(cpu: CPUState): void {
   showCurrentInstruction(cpu);
 }
 
-// ---- Sync line number scroll with editor --------------------
-export function initEditorSync(): void {
+// ---- sync line number scroll with editor --------------------
+export function initEditorSync(onLineClick?: (line: number) => void): void {
   const editor = $('code-editor') as HTMLTextAreaElement;
   const lineNums = $('line-numbers');
 
@@ -238,20 +287,27 @@ export function initEditorSync(): void {
   });
 
   editor.addEventListener('input', () => {
-    updateLineNumbers();
+    renderGutter();
   });
 
   editor.addEventListener('keydown', (e) => {
-    // Tab support
+    // tab support
     if (e.key === 'Tab') {
       e.preventDefault();
       const start = editor.selectionStart;
       const end = editor.selectionEnd;
       editor.value = editor.value.substring(0, start) + '  ' + editor.value.substring(end);
       editor.selectionStart = editor.selectionEnd = start + 2;
-      updateLineNumbers();
+      renderGutter();
     }
   });
 
-  updateLineNumbers();
+  // click a line number to toggle a breakpoint on that source line.
+  lineNums.addEventListener('click', (e) => {
+    const span = (e.target as HTMLElement).closest('.ln') as HTMLElement | null;
+    if (!span || span.dataset.line === undefined) return;
+    onLineClick?.(parseInt(span.dataset.line, 10));
+  });
+
+  renderGutter();
 }

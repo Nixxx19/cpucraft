@@ -1,8 +1,8 @@
 // ============================================================
-// cpucraft - Debugger
+// cpucraft - debugger
 // ============================================================
 
-import { CPUState, step, resetCPU } from './cpu';
+import { CPUState, step, resetCPU, Opcode, decodeInstruction } from './cpu';
 
 export interface DebuggerState {
   breakpoints: Set<number>;
@@ -53,7 +53,7 @@ export function toggleWatchpoint(dbg: DebuggerState, addr: number): boolean {
 }
 
 export function debugStep(cpu: CPUState, dbg: DebuggerState): boolean {
-  // Snapshot watched memory
+  // snapshot watched memory
   const watchSnapshots = new Map<number, number>();
   for (const addr of dbg.watchpoints) {
     watchSnapshots.set(addr, cpu.memory[addr]);
@@ -62,7 +62,7 @@ export function debugStep(cpu: CPUState, dbg: DebuggerState): boolean {
   const result = step(cpu);
   if (!result.executed) return false;
 
-  // Check watchpoints
+  // check watchpoints
   for (const [addr, oldVal] of watchSnapshots) {
     const newVal = cpu.memory[addr];
     if (newVal !== oldVal && dbg.onWatchpoint) {
@@ -81,6 +81,26 @@ export function debugStep(cpu: CPUState, dbg: DebuggerState): boolean {
   return true;
 }
 
+// step over a call: run the whole subroutine as one step
+export function debugStepOver(cpu: CPUState, dbg: DebuggerState): boolean {
+  if (cpu.halted) return false;
+
+  const { opcode } = decodeInstruction(cpu.memory[cpu.pc]);
+  if (opcode !== Opcode.CALL) {
+    return debugStep(cpu, dbg);
+  }
+
+  // sp before the call; ret brings it back here
+  const targetSp = cpu.sp;
+  let ok = debugStep(cpu, dbg);            // the call itself
+  let steps = 0;
+  while (ok && !cpu.halted && cpu.sp < targetSp && steps < dbg.maxSteps) {
+    ok = debugStep(cpu, dbg);
+    steps++;
+  }
+  return ok && !cpu.halted;
+}
+
 export function debugRun(cpu: CPUState, dbg: DebuggerState): void {
   if (dbg.running) return;
   dbg.running = true;
@@ -88,7 +108,7 @@ export function debugRun(cpu: CPUState, dbg: DebuggerState): void {
   const tick = () => {
     if (!dbg.running) return;
 
-    // Execute a batch of steps for performance at high speeds
+    // execute a batch of steps for performance at high speeds
     const batchSize = dbg.speed <= 10 ? 100 : dbg.speed <= 50 ? 10 : 1;
 
     for (let i = 0; i < batchSize; i++) {
@@ -100,7 +120,7 @@ export function debugRun(cpu: CPUState, dbg: DebuggerState): void {
         return;
       }
 
-      // Check breakpoint at NEXT instruction
+      // check breakpoint at next instruction
       if (dbg.breakpoints.has(cpu.pc)) {
         dbg.running = false;
         if (dbg.onBreakpoint) dbg.onBreakpoint(cpu.pc);

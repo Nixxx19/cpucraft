@@ -144,8 +144,8 @@ footer {
 }
 
 .line-numbers {
-  width: 44px;
-  min-width: 44px;
+  width: 52px;
+  min-width: 52px;
   padding: 8px 4px 8px 8px;
   background: var(--bg-secondary);
   color: var(--text-dim);
@@ -157,6 +157,24 @@ footer {
   user-select: none;
   border-right: 1px solid var(--border);
   white-space: pre;
+}
+
+.line-numbers .ln {
+  cursor: pointer;
+}
+
+.line-numbers .ln:hover {
+  color: var(--text-secondary);
+}
+
+.line-numbers .ln-bp {
+  color: var(--accent-red);
+  font-weight: 700;
+}
+
+.line-numbers .ln-current {
+  color: var(--accent-green);
+  font-weight: 700;
 }
 
 #code-editor {
@@ -324,6 +342,50 @@ footer {
   font-weight: 700;
 }
 
+.mem-cell {
+  cursor: pointer;
+  border-radius: 2px;
+}
+
+.mem-cell:hover {
+  background: var(--bg-hover);
+}
+
+.mem-breakpoint {
+  background: rgba(248, 81, 73, 0.18);
+  box-shadow: inset 0 0 0 1px var(--accent-red);
+  color: var(--accent-red);
+}
+
+/* ---- Input queue ------------------------------------------- */
+
+.input-queue {
+  width: calc(100% - 24px);
+  margin: 8px 12px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 6px 8px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.input-queue:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+}
+
+.hint {
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+/* file-upload label behaves like a small button */
+label.btn-small {
+  display: inline-block;
+}
+
 /* ---- Output ------------------------------------------------ */
 
 .output-content {
@@ -334,17 +396,25 @@ footer {
   font-size: 12px;
 }
 
-.output-chars {
+.output-dec {
   color: var(--accent-green);
   font-size: 16px;
-  letter-spacing: 2px;
+  letter-spacing: 1px;
   padding-bottom: 4px;
   word-break: break-all;
 }
 
 .output-hex {
+  color: var(--text-secondary);
+  font-size: 11px;
+  padding-bottom: 4px;
+  word-break: break-all;
+}
+
+.output-chars {
   color: var(--text-dim);
-  font-size: 10px;
+  font-size: 11px;
+  letter-spacing: 1px;
   word-break: break-all;
 }
 

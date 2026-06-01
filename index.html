@@ -18,7 +18,17 @@
         <option value="hello">hello.asm - Print HELLO WORLD</option>
         <option value="fibonacci">fibonacci.asm - Fibonacci sequence</option>
         <option value="sort">sort.asm - Bubble sort</option>
+        <option value="input-sum">input-sum.asm - Sum the input queue</option>
       </select>
+      <select id="saved-select" title="Load a saved program">
+        <option value="">Saved programs...</option>
+      </select>
+      <button id="btn-save" class="btn-small" title="Save current program to this browser">Save</button>
+      <button id="btn-delete-saved" class="btn-small" title="Delete the selected saved program">Del</button>
+      <button id="btn-download" class="btn-small" title="Download the editor contents as .asm">↓ .asm</button>
+      <label class="btn-small" title="Open a .asm file">↑ .asm
+        <input id="file-upload" type="file" accept=".asm,.txt" hidden />
+      </label>
     </div>
   </header>
 
@@ -27,7 +37,7 @@
     <section class="panel panel-editor">
       <div class="panel-header">
         <span>Assembly Editor</span>
-        <span class="shortcuts-hint">F6: Assemble | F10: Step | F5: Run/Stop</span>
+        <span class="shortcuts-hint">F6: Assemble | F10: Step | F11: Step Over | F5: Run/Stop</span>
       </div>
       <div class="editor-wrapper">
         <pre class="line-numbers" id="line-numbers"></pre>
@@ -61,6 +71,16 @@
         <div id="memory-grid" class="memory-grid"></div>
       </div>
 
+      <!-- Input queue -->
+      <div class="sub-panel">
+        <div class="panel-header">
+          <span>Input queue</span>
+          <span class="hint">read by IN — space/comma separated</span>
+        </div>
+        <input id="input-queue" class="input-queue" type="text" spellcheck="false"
+               placeholder="e.g. 10 20 30 40 50" />
+      </div>
+
       <!-- Output -->
       <div class="sub-panel">
         <div class="panel-header">Output</div>
@@ -74,6 +94,7 @@
     <div class="controls">
       <button id="btn-assemble" class="btn btn-primary">Assemble</button>
       <button id="btn-step" class="btn">Step</button>
+      <button id="btn-step-over" class="btn" title="Step over CALL (F11)">Step Over</button>
       <button id="btn-run" class="btn btn-run">Run</button>
       <button id="btn-stop" class="btn btn-stop" disabled>Stop</button>
       <button id="btn-reset" class="btn">Reset</button>
