@@ -6,7 +6,7 @@ i built this because i wanted to actually understand how a cpu works instead of 
 
 ## demo
 
-<!-- drag your demo video here in the github web editor and it'll embed as a player -->
+https://github.com/user-attachments/assets/75a51971-899f-4574-9870-9cb3ba50b6db
 
 a quick run-through: pick a program, assemble it, step through a few instructions, drop a breakpoint on a line, then let it run.
 
